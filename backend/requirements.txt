@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+playwright
+pandas
+python-dotenv
+numpy
+PyPDF2
+python-multipart
+# HTTP & parsing
+requests
+beautifulsoup4
+lxml
+# Ajoute ici les autres paquets nécessaires au fur et à mesure (Selenium, requests, gensim, etc.)
