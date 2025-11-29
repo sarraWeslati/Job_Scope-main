@@ -1,7 +1,7 @@
 import time
 import random
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from playwright.sync_api import sync_playwright
 
@@ -17,7 +17,13 @@ def _extract_text_or_none(el):
         return None
 
 
-def scrape_site_playwright(site: str, query: str = "python", location: str = "", max_jobs: int = 100, headless: bool = True) -> List[dict]:
+def scrape_site_playwright(site: str,
+                           query: str = "python",
+                           location: str = "",
+                           max_jobs: int = 100,
+                           headless: bool = True,
+                           proxies: Optional[List[str]] = None,
+                           user_agents: Optional[List[str]] = None) -> List[dict]:
     """
     Generic Playwright scraper for Indeed and LinkedIn search pages.
 
@@ -31,12 +37,25 @@ def scrape_site_playwright(site: str, query: str = "python", location: str = "",
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
-        page = browser.new_page()
 
         start = 0
         increment = 10 if site == "indeed" else 25
 
         while len(results) < max_jobs:
+            # rotate proxy and user-agent per page/context
+            proxy = random.choice(proxies) if proxies else None
+            ua = random.choice(user_agents) if user_agents else None
+
+            context_args = {}
+            if ua:
+                context_args["user_agent"] = ua
+            if proxy:
+                # Playwright expects proxy as dict like {"server": "http://host:port"}
+                context_args["proxy"] = {"server": proxy}
+
+            context = browser.new_context(**context_args)
+            page = context.new_page()
+
             if site == "indeed":
                 url = f"https://www.indeed.com/jobs?q={query.replace(' ', '+')}&l={location.replace(' ', '+')}&start={start}"
                 card_selectors = ["a.tapItem", "div.job_seen_beacon", "div.jobsearch-SerpJobCard"]
@@ -44,22 +63,27 @@ def scrape_site_playwright(site: str, query: str = "python", location: str = "",
                 url = f"https://www.linkedin.com/jobs/search?keywords={query.replace(' ', '+')}&location={location.replace(' ', '+')}&start={start}"
                 card_selectors = [".base-card", "li.result-card", ".jobs-search-results__list-item"]
             else:
+                context.close()
                 break
 
             try:
                 page.goto(url, timeout=30000)
             except Exception:
+                context.close()
                 break
 
             # scroll a bit to trigger lazy loading
             for _ in range(3):
-                page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
+                try:
+                    page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
+                except Exception:
+                    pass
                 _random_sleep(0.3, 1.0)
 
             cards = []
             for sel in card_selectors:
-                locs = page.locator(sel)
                 try:
+                    locs = page.locator(sel)
                     count = locs.count()
                 except Exception:
                     count = 0
@@ -73,6 +97,7 @@ def scrape_site_playwright(site: str, query: str = "python", location: str = "",
 
             if not cards:
                 # no more results or page structure changed
+                context.close()
                 break
 
             for c in cards:
@@ -114,6 +139,7 @@ def scrape_site_playwright(site: str, query: str = "python", location: str = "",
 
             start += increment
             _random_sleep(0.5, 1.5)
+            context.close()
 
         browser.close()
 

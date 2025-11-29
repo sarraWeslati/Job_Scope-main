@@ -1,17 +1,44 @@
 "use client";
 import { useState } from "react";
 
-export default function ScrapeTrigger() {
+type Props = {
+  onComplete?: () => void;
+};
+
+export default function ScrapeTrigger({ onComplete }: Props) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
 
   const handleScrape = async () => {
     setLoading(true);
     setStatus("");
-    try {
+      try {
       const res = await fetch("/api/scrape", { method: "POST" });
       const data = await res.json();
-      setStatus(data.message || "Scraping terminé !");
+      if (!res.ok) throw new Error(data?.detail || data?.message || "Enqueue failed");
+      const jobId = data.job_id;
+      setStatus("Job enqueued: " + jobId + ". Attente du résultat...");
+
+      // Poll for job status until done/failed
+      const poll = async () => {
+        try {
+          const s = await fetch(`/api/scrape/status/${jobId}`);
+          const j = await s.json();
+          if (j.status === "done") {
+            setStatus("Scraping terminé.");
+            if (typeof onComplete === "function") onComplete();
+            return;
+          }
+          if (j.status === "failed") {
+            setStatus("Scraping échoué: " + (j.error || "unknown"));
+            return;
+          }
+        } catch (e) {
+          // ignore transient errors
+        }
+        setTimeout(poll, 2000);
+      };
+      setTimeout(poll, 1000);
     } catch {
       setStatus("Erreur lors du scraping.");
     } finally {

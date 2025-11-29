@@ -16,7 +16,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 type Skill = { name: string; count: number };
 
-export default function SkillChart() {
+export default function SkillChart({ reloadKey }: { reloadKey?: number }) {
   const [skills, setSkills] = useState<Skill[]>([]);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function SkillChart() {
       .then((res) => res.json())
       .then((data) => setSkills(data.skills ?? []))
       .catch(() => setSkills([]));
-  }, []);
+  }, [reloadKey]);
 
   const data = {
     labels: skills.map((s) => s.name),
